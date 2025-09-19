@@ -294,7 +294,7 @@ node js-client/testDutchAuction.mjs
 
 ---
 
-## Troubleshooting (key gotchas and quick fixes)
+## Troubleshooting
 
 - Incorrect `gblend create` source format or `.wasm` parsing errors
   - Symptom: `error: stream did not contain valid UTF-8`
