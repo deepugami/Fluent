@@ -8,7 +8,9 @@
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "hardhat compile",
+    "deploy:blended": "hardhat run scripts/deployBlended.js --network fluentTestnet | cat",
+    "deploy:dutch": "hardhat run scripts/deployDutchAuction.js --network fluentTestnet | cat"
   },
   "keywords": [],
   "author": "",

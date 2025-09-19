@@ -1,20 +1,42 @@
-## Beginner’s Guide: Blend a Hardhat project with a Rust/WASM contract using gblend
+## Beginner’s Guide: Migrate a Hardhat project to gblend (Rust/WASM) with a Dutch Auction example
 
-This guide shows how to take an existing Hardhat (Solidity) project and make it “blended” by integrating a Rust/WASM contract compiled with gblend. You will:
+This guide shows how to migrate an existing Hardhat (Solidity) project to a blended setup by integrating a Rust/WASM contract compiled with gblend. You will:
 
 - Build a Rust/WASM contract using gblend
 - Deploy the WASM contract to Fluent Testnet
-- Import the generated Solidity interface in a wrapper contract
-- Deploy the Solidity wrapper with Hardhat
-- Call the wrapper from a simple Node script
+- Import the generated Solidity interface in a Solidity contract
+- Deploy the contract with Hardhat
+- Call the contract from a simple Node script
 
-The focus is on Hardhat + gblend usage, not on writing the Rust or Solidity logic itself.
+The focus is on Hardhat + gblend usage, not on writing Rust or Solidity from scratch.
 
 ---
 
 ### What you’ll build
 
-We’ll use a simple example: a Rust/WASM contract that exposes `power(uint256 base, uint256 exponent)`. gblend generates a Solidity interface for it (e.g. `IPowerCalculator`) that we can import into a Solidity wrapper. Then we deploy and call it end-to-end.
+We’ll upgrade a Dutch auction to use a non-linear price curve powered by a Rust/WASM helper. The Rust contract exposes `power(uint256 base, uint256 exponent)`. gblend generates a Solidity interface (`IPowerCalculator`) that we call from a Solidity auction contract to compute:
+
+price = START_PRICE * (remainingBlocks^EXPONENT) / (totalBlocks^EXPONENT)
+
+For background on the auction mechanics, see Dutch Auction on Solidity by Example: https://solidity-by-example.org/app/dutch-auction/
+
+---
+
+### Branches for migration
+
+This repository provides two branches to follow the migration path:
+
+- `starting-point`: the baseline Hardhat-only project before adding gblend
+- `blended-final`: the final state after integrating gblend and the Rust/WASM helper
+
+How to check out locally:
+
+```bash
+git fetch origin
+git checkout starting-point
+# ... follow the guide to migrate ...
+git checkout blended-final
+```
 
 ---
 
@@ -26,29 +48,47 @@ We’ll use a simple example: a Rust/WASM contract that exposes `power(uint256 b
 - Foundry (forge, cast)
 - gblend CLI
 - RPC URL for Fluent Testnet
+- Docker Desktop running in background
 
 Make sure you have a private key with testnet funds. Keep secrets in a local `.env` file.
 
-Example `.env` (do not commit):
+Example `.env`:
 
 ```bash
 RPC_URL=https://rpc.testnet.fluent.xyz
 PRIVATE_KEY=0xYOUR_PRIVATE_KEY
 # Set after deploying WASM
 WASM_ADDRESS=0x...
+# Optional Dutch auction params
+START_PRICE_WEI=100000000000000000   # 0.1 ETH
+DURATION_BLOCKS=2000                  # ~6-7 hours depending on block time
+EXPONENT=2                            # 2 = quadratic decay
 ```
+
+## Network Parameters
+- Network Name: Fluent Testnet
+- HTTPS RPC URL: https://rpc.testnet.fluent.xyz/
+- Chain ID: 20994
+- Symbol: ETH
+- Explorer: https://testnet.fluentscan.xyz/
+- Faucet: https://testnet.gblend.xyz/
 
 ---
 
 ## 1) Install Hardhat dependencies (in your existing project)
 
-From your project root:
+From your project root (where this repo’s `local` directory lives):
 
 ```bash
+cd local
 npm install --save-dev hardhat @nomiclabs/hardhat-ethers ethers dotenv
 ```
 
-Create or update `hardhat.config.js` (CommonJS is the simplest path):
+Create or update `local/hardhat.config.js` (CommonJS). We unify folders as follows:
+
+- Solidity sources: `local/src`
+- Hardhat artifacts: `local/artifacts`
+- gblend outputs: `local/out`
 
 ```js
 require('dotenv').config();
@@ -67,20 +107,29 @@ module.exports = {
     }
   },
   paths: {
-    sources: './contracts',
+    sources: './src',
     artifacts: './artifacts',
     tests: './test'
   }
 };
 ```
 
+#### Folder layout rationale and tested setup
+
+- Using `src` for Solidity sources keeps Hardhat and Foundry/gblend aligned.
+- Hardhat writes build artifacts to `artifacts/`, while Foundry/gblend write to `out/`. Keeping these separate avoids tool conflicts and keeps imports predictable (`../out/PowerCalculator.wasm/interface.sol`).
+- This guide has been validated with:
+  - Hardhat: `paths.sources=src`, `paths.artifacts=artifacts`
+  - Foundry: `src=src`, `out=out`
+
 ---
 
 ## 2) Build the Rust/WASM with gblend
 
-Run the build from your project root (where your gblend project is initialized):
+Run the build from `local` (the gblend project is already set up here):
 
 ```bash
+cd local
 gblend build
 ```
 
@@ -98,15 +147,27 @@ out/
 ```
 
 - `out/PowerCalculator.wasm/interface.sol` is a Solidity interface file containing `interface IPowerCalculator { ... }`.
-- The interface name (`IPowerCalculator`) is the contract name you’ll need when deploying the WASM.
+- The interface name (`IPowerCalculator`) is the contract name you’ll need when deploying the WASM (for the path-based method below).
 
 ---
 
 ## 3) Deploy the WASM contract (Fluent Testnet)
 
-Deploy with gblend. The key is to use `<path>:<contractname>` where `contractname` is the interface name inside `interface.sol` (e.g. `IPowerCalculator`).
+Recommended (package-name) method:
 
 ```bash
+cd local
+gblend create PowerCalculator.wasm \
+  --rpc-url "$RPC_URL" \
+  --private-key "$PRIVATE_KEY" \
+  --broadcast \
+  --wasm
+```
+
+Alternative (explicit path + interface name):
+
+```bash
+cd local
 gblend create out/PowerCalculator.wasm/lib.wasm:IPowerCalculator \
   --rpc-url "$RPC_URL" \
   --private-key "$PRIVATE_KEY" \
@@ -114,130 +175,74 @@ gblend create out/PowerCalculator.wasm/lib.wasm:IPowerCalculator \
   --wasm
 ```
 
-Save the deployed address, e.g. into `deployed-addresses-wasm.txt`, and set `WASM_ADDRESS` in your `.env` to that value.
+- If you hit `error: stream did not contain valid UTF-8`, use the package-name method shown above. This avoids tools trying to parse the raw `.wasm` as Solidity.
+- Save the deployed address (e.g., in `local/deployed-addresses-wasm.txt`) and set `WASM_ADDRESS` in your `.env` to that value.
 
 ---
 
-## 4) Add a Solidity wrapper that calls WASM
+## 4) Add a Dutch auction that calls the WASM power helper
 
-Create `contracts/BlendedCaller.sol`:
+We use a minimal auction contract at `local/src/DutchAuctionWasmWrapper.sol` that imports the gblend-generated interface and calls the WASM helper for the non-linear curve.
+
+Key imports and naming (lint-friendly):
 
 ```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+import { IPowerCalculator } from "../out/PowerCalculator.wasm/interface.sol"; // named import
 
-import "../out/PowerCalculator.wasm/interface.sol";
-
-contract BlendedCaller {
-    IPowerCalculator public immutable powerCalculator;
-
-    constructor(address _powerCalculator) {
-        powerCalculator = IPowerCalculator(_powerCalculator);
-    }
-
-    function calcPower(uint256 base, uint256 exp) external returns (uint256) {
-        return powerCalculator.power(base, exp);
-    }
-}
+// immutables use SCREAMING_SNAKE_CASE
+address payable public immutable SELLER;
+uint256 public immutable START_PRICE;
+uint256 public immutable START_BLOCK;
+uint256 public immutable END_BLOCK;
+uint256 public immutable EXPONENT;
+IPowerCalculator public immutable POWER_CALCULATOR;
 ```
 
-Notes:
+The contract computes:
 
-- The import path points to the `interface.sol` that gblend generated.
-- We pass the deployed WASM contract address to the constructor.
+- `remainingBlocks = END_BLOCK - block.number`
+- `totalBlocks = END_BLOCK - START_BLOCK`
+- `currentPrice = START_PRICE * (remainingBlocks^EXPONENT) / (totalBlocks^EXPONENT)`
+
+Note: `currentPrice()` is not marked `view` because the generated interface method is non-view.
 
 ---
 
-## 5) Deploy the Solidity wrapper with Hardhat
+## 5) Deploy the Dutch auction with Hardhat
 
-Create `scripts/deployBlended.js`:
-
-```js
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('hardhat');
-
-async function main() {
-  const wasmAddress = process.env.WASM_ADDRESS;
-  if (!wasmAddress) throw new Error('WASM_ADDRESS missing in .env');
-
-  console.log('Using WASM contract address:', wasmAddress);
-  const BlendedCaller = await ethers.getContractFactory('BlendedCaller');
-  const blended = await BlendedCaller.deploy(wasmAddress);
-  await blended.deployed();
-  console.log('BlendedCaller deployed to:', blended.address);
-
-  fs.writeFileSync('deployed-addresses-solidity.txt', blended.address + '\n');
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
-```
-
-Compile and deploy:
+Use the provided script `local/scripts/deployDutchAuction.js`:
 
 ```bash
+cd local
 npx hardhat compile
-npx hardhat run scripts/deployBlended.js --network fluentTestnet
+npx hardhat run scripts/deployDutchAuction.js --network fluentTestnet
 ```
 
-The deployed wrapper address is written to `deployed-addresses-solidity.txt`.
+The deployed address is written to `local/deployed-addresses-solidity.txt`.
+
+Environment overrides supported by the script:
+
+- `START_PRICE_WEI` (default: `0.1 ETH`)
+- `DURATION_BLOCKS` (default: `2000`)
+- `EXPONENT` (default: `2`)
+
+Common gotcha: ensure `PRIVATE_KEY` is a full 66-character hex string (`0x` + 64 hex chars), or Hardhat will error `Invalid account: private key too short`.
 
 ---
 
-## 6) Call the wrapper from Node
+## 6) Call the auction from Node
 
-Create `js-client/testCall.mjs` (ESM) that reads the compiled artifact via `fs`:
-
-```js
-import 'dotenv/config';
-import fs from 'fs';
-import { ethers } from 'ethers';
-
-const artifactPath = new URL('../artifacts/contracts/BlendedCaller.sol/BlendedCaller.json', import.meta.url);
-const artifactJson = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-
-async function main() {
-  const rpc = process.env.RPC_URL;
-  const pk = process.env.PRIVATE_KEY;
-  if (!rpc || !pk) throw new Error('.env must contain RPC_URL and PRIVATE_KEY');
-
-  const provider = new ethers.providers.JsonRpcProvider(rpc);
-  const wallet = new ethers.Wallet(pk, provider);
-
-  const solAddr = fs.readFileSync('deployed-addresses-solidity.txt', 'utf8').trim();
-  console.log('Using Solidity contract:', solAddr);
-
-  const contract = new ethers.Contract(solAddr, artifactJson.abi, wallet);
-
-  try {
-    const r = await contract.callStatic.calcPower(2, 8);
-    console.log('callStatic calcPower(2,8) =>', r.toString());
-  } catch (e) {
-    console.log('callStatic failed (function may be non-view). Sending tx...');
-  }
-
-  const tx = await contract.calcPower(2, 8);
-  console.log('tx hash:', tx.hash);
-  const receipt = await tx.wait();
-  console.log('tx mined in block', receipt.blockNumber);
-}
-
-main().catch((e) => {
-  console.error('Unhandled error:', e);
-  process.exit(1);
-});
-```
-
-Run it:
+Use the provided ESM script `local/js-client/testDutchAuction.mjs` to read the artifact and interact. Make sure the artifact path matches Hardhat’s configured sources directory (`src`).
 
 ```bash
-node js-client/testCall.mjs
+cd local
+node js-client/testDutchAuction.mjs
 ```
 
-You should see a `256` result for `power(2, 8)` and a mined transaction.
+Expected output: a positive `currentPrice`. Optionally a `buy` transaction if the price is > 0.
+
+Ethers version note:
+- This repo pins `ethers@5`. If you use `ethers@6` in your environment, return types differ (no `BigNumber`). Either keep `ethers@5` (recommended for this guide) or adapt your client code for v6 (use `bigint` and `toString()` where needed).
 
 ---
 
@@ -248,63 +253,75 @@ You should see a `256` result for `power(2, 8)` and a mined transaction.
 # Create .env with RPC_URL, PRIVATE_KEY (and later WASM_ADDRESS)
 
 # 1) Install project deps
+cd local
 npm install
 
 # 2) Build the WASM using gblend
+cd local
 gblend build
 
-# 3) Deploy WASM (use the correct interface name from interface.sol)
-gblend create out/PowerCalculator.wasm/lib.wasm:IPowerCalculator \
+# 3) Deploy WASM (recommended: package-name method)
+cd local
+gblend create PowerCalculator.wasm \
   --rpc-url "$RPC_URL" \
   --private-key "$PRIVATE_KEY" \
   --broadcast \
   --wasm
 
-# 4) Compile + deploy the Solidity wrapper
+# Alternative (explicit path + interface name)
+# gblend create out/PowerCalculator.wasm/lib.wasm:IPowerCalculator --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast --wasm
+
+# 4) Compile + deploy the Dutch auction
+cd local
 npx hardhat compile
-npx hardhat run scripts/deployBlended.js --network fluentTestnet
+npx hardhat run scripts/deployDutchAuction.js --network fluentTestnet
 
 # 5) Call from Node
-node js-client/testCall.mjs
+cd local
+node js-client/testDutchAuction.mjs
 ```
 
 ---
 
 ## Where things end up
 
-- gblend build artifacts: `out/PowerCalculator.wasm/` (includes `lib.wasm`, `interface.sol`, `abi.json`)
-- Solidity wrapper: `contracts/BlendedCaller.sol`
-- Hardhat artifacts: `artifacts/`
+- gblend build artifacts: `local/out/PowerCalculator.wasm/` (includes `lib.wasm`, `interface.sol`, `abi.json`)
+- Solidity contract: `local/src/DutchAuctionWasmWrapper.sol`
+- Hardhat artifacts: `local/artifacts/`
 - Addresses:
-  - WASM: record it yourself (e.g., `deployed-addresses-wasm.txt`)
-  - Solidity wrapper: `deployed-addresses-solidity.txt`
+  - WASM: record it yourself (e.g., `local/deployed-addresses-wasm.txt`)
+  - Solidity: `local/deployed-addresses-solidity.txt`
 
 ---
 
 ## Troubleshooting (key gotchas and quick fixes)
 
-- Incorrect `gblend create` source format
-  - Symptom: `error: contract source info format must be '<path>:<contractname>'`
-  - Fix: Use `out/PowerCalculator.wasm/lib.wasm:IPowerCalculator` (replace the interface name as found in `interface.sol`).
+- Incorrect `gblend create` source format or `.wasm` parsing errors
+  - Symptom: `error: stream did not contain valid UTF-8`
+  - Fix: Use the package-name method: `gblend create PowerCalculator.wasm ... --wasm`.
 
 - Interface path confusion
   - Symptom: Treating `out/interface.sol` as a file.
   - Fix: `out/interface.sol` is a directory with metadata. The Solidity interface file you import is `out/PowerCalculator.wasm/interface.sol`.
 
+- Forge lint: unaliased import
+  - Symptom: `note[unaliased-plain-import]`
+  - Fix: use named import: `import { IPowerCalculator } from "../out/PowerCalculator.wasm/interface.sol";`
+
+- Forge lint: immutables casing
+  - Symptom: `note[screaming-snake-case-immutable]`
+  - Fix: rename immutables to SCREAMING_SNAKE_CASE and update usages.
+
 - Hardhat ESM vs CommonJS mismatches
   - Symptoms: `require is not defined in ES module scope`, `No Hardhat config file found`, or `ERR_PACKAGE_PATH_NOT_EXPORTED`.
   - Fix: Prefer CommonJS for Hardhat setup (use `hardhat.config.js` with `require(...)`). Avoid setting `"type": "module"` in `package.json` when starting out.
 
-- Importing JSON with ESM
-  - Symptom: Using `import ... from '...json' assert { type: 'json' }` fails on your Node setup.
-  - Fix: Read JSON via `fs.readFileSync` + `JSON.parse` instead of import assertions.
-
-- Node `--input-type=module`
-  - Symptom: `--input-type can only be used with string input`.
-  - Fix: Just run `node js-client/testCall.mjs` without that flag.
+- Ethers v5 vs v6 differences
+  - Symptom: `TypeError: priceNow.gt is not a function` (when using v6)
+  - Fix: stick to `ethers@5` for this guide, or adapt to v6 using `bigint` and string conversions.
 
 ---
 
 ## You’re done
 
-You now have a Hardhat project that calls into a Rust/WASM contract deployed on Fluent Testnet via gblend’s generated interface. From here, you can swap in your own Rust logic, regenerate with `gblend build`, and repeat the deploy + wrapper steps.
+You now have a Hardhat project that calls a Rust/WASM helper on Fluent Testnet via gblend’s generated interface, applied to a Dutch auction price curve. This flow has been verified end-to-end: WASM deployed with gblend, Solidity wrapper deployed with Hardhat, and interaction from Node. From here, you can swap in your own Rust logic, regenerate with `gblend build`, and repeat the deploy + call steps.

@@ -10,24 +10,15 @@ contract Deploy is Script {
         vm.startBroadcast();
 
         // Deploy WASM PowerCalculator
-        bytes memory wasmBytecode = vm.getCode(
-            "out/PowerCalculator.wasm/foundry.json"
-        );
+        bytes memory wasmBytecode = vm.getCode("out/PowerCalculator.wasm/foundry.json");
         console.log("WASM bytecode size:", wasmBytecode.length);
 
         address powerCalculator;
         assembly {
-            powerCalculator := create(
-                0,
-                add(wasmBytecode, 0x20),
-                mload(wasmBytecode)
-            )
+            powerCalculator := create(0, add(wasmBytecode, 0x20), mload(wasmBytecode))
         }
 
-        require(
-            powerCalculator != address(0),
-            "PowerCalculator deployment failed"
-        );
+        require(powerCalculator != address(0), "PowerCalculator deployment failed");
         console.log("PowerCalculator deployed at:", powerCalculator);
 
         // Test PowerCalculator directly

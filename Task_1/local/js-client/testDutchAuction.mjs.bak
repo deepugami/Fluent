@@ -1,0 +1,88 @@
+// js-client/testDutchAuction.mjs
+import 'dotenv/config';
+import fs from 'fs';
+import { ethers } from 'ethers';
+
+const artifactPath = new URL('../artifacts/contracts/DutchAuctionWasmWrapper.sol/DutchAuctionWasmWrapper.json', import.meta.url);
+// adjust the artifact path above if your Hardhat artifact path differs
+
+function normalizeToBigNumber(ethersLib, val) {
+  // ethers v5: BigNumber has _isBigNumber flag or toString()
+  // ethers v6: contract call may return bigint
+  if (val == null) throw new Error('value is null/undefined');
+
+  // If it's already an ethers BigNumber (v5)
+  if (val._isBigNumber) {
+    return val;
+  }
+
+  // If it's a bigint (ethers v6 may return bigint)
+  if (typeof val === 'bigint') {
+    return ethersLib.BigNumber.from(val.toString());
+  }
+
+  // If it's a string or number or something with toString()
+  return ethersLib.BigNumber.from(val.toString());
+}
+
+async function main() {
+  const rpc = process.env.RPC_URL;
+  const pk = process.env.PRIVATE_KEY;
+  if (!rpc || !pk) throw new Error('.env must contain RPC_URL and PRIVATE_KEY');
+
+  const provider = new ethers.providers.JsonRpcProvider(rpc);
+  const wallet = new ethers.Wallet(pk, provider);
+
+  // read wrapper address (script deploy writes to this file) if present
+  let solAddr = null;
+  try {
+    solAddr = fs.readFileSync('deployed-addresses-solidity.txt', 'utf8').trim();
+  } catch (e) {
+    // fallback: read from .env or hardcoded
+    solAddr = process.env.SOLIDITY_ADDRESS || process.env.WRAPPER_ADDRESS || '';
+  }
+  if (!solAddr) throw new Error('Could not find deployed Solidity wrapper address. Ensure deployed-addresses-solidity.txt or env var is set.');
+
+  console.log('Using DutchAuctionWasmWrapper:', solAddr);
+
+  // load artifact ABI
+  const artifactJson = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+
+  const contract = new ethers.Contract(solAddr, artifactJson.abi, wallet);
+
+  try {
+    // try callStatic
+    const raw = await contract.callStatic.currentPrice();
+    // normalize result into an ethers BigNumber
+    const priceNow = normalizeToBigNumber(ethers, raw);
+
+    console.log('callStatic currentPrice() =>', priceNow.toString());
+    // human friendly
+    try {
+      console.log('price in ETH:', ethers.utils.formatEther(priceNow));
+    } catch (e) {
+      // if formatEther not available (older contexts), just print wei string
+    }
+
+    // example numeric check using BigNumber
+    const threshold = ethers.BigNumber.from('100000000000000000'); // 0.1 ETH
+    if (priceNow.gt(threshold)) {
+      console.log('priceNow > 0.1 ETH');
+    } else {
+      console.log('priceNow <= 0.1 ETH');
+    }
+  } catch (err) {
+    console.log('callStatic failed (function may be non-view). Sending tx...', err?.message || err);
+    // attempt to send transaction if callStatic fails
+    const tx = await contract.currentPrice(); // this depends on your contract exposing non-view currentPrice that writes state
+    console.log('tx hash:', tx.hash);
+    const receipt = await tx.wait();
+    console.log('tx mined in block', receipt.blockNumber);
+  }
+}
+
+main().catch((e) => {
+  console.error('Unhandled error:', e);
+  process.exit(1);
+});
+

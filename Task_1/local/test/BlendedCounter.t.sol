@@ -10,9 +10,7 @@ contract BlendedCounterTest is Test {
 
     function setUp() public {
         // lslslsl
-        powerCalculator = vm.deployCode(
-            "out/PowerCalculator.wasm/foundry.json"
-        );
+        powerCalculator = vm.deployCode("out/PowerCalculator.wasm/foundry.json");
 
         // Deploy BlendedCounter with the PowerCalculator address
         counter = new BlendedCounter(powerCalculator);
