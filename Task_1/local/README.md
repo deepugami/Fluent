@@ -46,7 +46,8 @@ npx hardhat compile
 # f) Deploy the Solidity wrapper on Fluent Testnet
 npx hardhat run scripts/deployDutchAuction.js --network fluentTestnet
 
-# g) Verify by calling currentPrice() from your own client or Hardhat console
+# g) Verify by calling currentPrice() using the provided Node script
+node js-client/testDutchAuction.mjs
 ```
 
 ## Troubleshooting
