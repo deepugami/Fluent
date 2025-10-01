@@ -9,7 +9,9 @@
   },
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:dutch": "hardhat run scripts/deployDutchAuction.js --network fluentTestnet | cat"
+    "deploy:dutch": "hardhat run scripts/deployDutchAuction.js --network fluentTestnet | cat",
+    "blocks": "node scripts/computeBlocks.js",
+    "copy:iface": "node scripts/copyWasmInterface.js"
   },
   "keywords": [],
   "author": "",
