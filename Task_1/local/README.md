@@ -1,11 +1,11 @@
 # Hardhat-first project with gblend WASM helper
 
-This repo shows how to add gblend + a Rust/WASM helper to an existing Hardhat (HH) project, using a Dutch Auction as the example. HH remains the primary workflow; gblend is isolated to the WASM helper.
+This repo shows how to add gblend + a Rust/WASM to an existing Hardhat (HH) project, using a Dutch Auction as the example.
 
 ## Branches
 
-- `starting-point`: native Hardhat-only project (no gblend, no Foundry, no `contracts/wasm`, no `out/`).
-- `blended-final` (this branch): integrated state with gblend WASM helper and a Solidity wrapper calling it.
+- `starting-point`: native Hardhat-only project
+- `blended-final` (this branch): integrated state with gblend WASM and a Solidity wrapper calling it.
 
 Reviewers: start with `starting-point`, then compare with `blended-final` to see exactly what was added.
 
@@ -57,4 +57,4 @@ node js-client/testDutchAuction.mjs
 - Auction deploying with past START/END blocks shows 0 price: compute fresh blocks with `scripts/computeBlocks.js`
 - Minor integer rounding differences between JS and WASM: expect slight rounding differences when comparing off-chain calculations
 
-Hardhat is used for Solidity. Foundry/gblend are restricted to `contracts/wasm` for the WASM helper.
+Hardhat is used for Solidity. Foundry/gblend are restricted to `contracts/wasm` for the WASM.
