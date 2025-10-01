@@ -17,7 +17,7 @@ PowerCalculator.wasm
 *.wat
 
 # Rust (local target dirs)
-src/power-calculator/target/
+contracts/wasm/power-calculator/target/
 
 # Env / local-only files
 .env
