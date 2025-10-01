@@ -6,8 +6,6 @@ This guide shows how to take an existing Hardhat (HH) project and cleanly add a 
 
 - `starting-point`: HH-only baseline with a plain `DutchAuction.sol`, a HH deploy script, and a basic test. No Foundry/gblend files and no `contracts/wasm` or `out/`.
 - `blended-final`: Integrated state that adds the Rust/WASM helper via gblend and a Solidity wrapper (`BlendedDutchAuction.sol`) that imports the gblend-generated interface.
-
-<<<<<<< HEAD
 ---
 
 ### What you’ll build
@@ -16,44 +14,21 @@ We’ll upgrade a Dutch auction to use a non-linear price curve powered by a Rus
 
 price = START_PRICE * (remainingBlocks^EXPONENT) / (totalBlocks^EXPONENT)
 
-For background on the auction mechanics, see Dutch Auction on Solidity by Example: https://solidity-by-example.org/app/dutch-auction/
+For background on auction mechanics, see Dutch Auction on Solidity by Example: https://solidity-by-example.org/app/dutch-auction/
 
 ---
-
-<<<<<<< HEAD
-### Branch roles
-- `starting-point`: Baseline Hardhat-only starting state for the migration (pre-gblend, pre-WASM). Use this to begin the guide’s steps.
-- `blended-final`: Final state after integrating gblend + Rust/WASM and adding the Dutch auction wrapper, deploy script, and JS client. This reflects the completed guide.
-=======
-## Hardhat-first + gblend (WASM) for Dutch Auction
-
-This guide shows how to take an existing Hardhat (HH) project and cleanly add a Rust/WASM helper using gblend. We keep HH as the primary tool; gblend is isolated to the WASM crate and its generated interface.
-
-### Branches
-
-- `starting-point`: HH-only baseline with a plain `DutchAuction.sol`, a HH deploy script, and a basic test. No Foundry/gblend files and no `contracts/wasm` or `out/`.
-- `blended-final`: Integrated state that adds the Rust/WASM helper via gblend and a Solidity wrapper (`BlendedDutchAuction.sol`) that imports the gblend-generated interface.
-
-Checkout locally:
-
-```bash
-git fetch origin
-git checkout starting-point
-# explore the HH-only baseline, then compare with the integrated state
-git checkout blended-final
-```
 
 ### Structure (HH-first)
 
 - Solidity sources in `local/contracts/solidity`
 - WASM crate at `local/contracts/wasm/power-calculator`
 - Foundry/gblend configured to use ONLY `contracts/wasm` (see `local/foundry.toml`)
-- HH artifacts in `local/artifacts/`
+- Hardhat artifacts in `local/artifacts/`
 - gblend build outputs in `local/out/PowerCalculator.wasm/` (e.g., `lib.wasm`, `interface.sol`)
 - Wrapper `local/contracts/solidity/BlendedDutchAuction.sol` imports:
   - `import { IPowerCalculator } from "../../out/PowerCalculator.wasm/interface.sol";`
 
-Optional: `local/scripts/copyWasmInterface.js` can copy the interface to `out/IPowerCalculator.sol` if you want a flatter import path. Keep it simple; no extra tooling.
+Optional: `local/scripts/copyWasmInterface.js` can copy the interface to `out/IPowerCalculator.sol` if you want a flatter import path.
 
 ### Quick Start (copy/paste)
 
@@ -93,10 +68,9 @@ Use `local/.env.example` as a template. Key vars:
 
 ### Troubleshooting (real issues we hit)
 
-- gblend CLI flag mismatch: use `--rpc`, not `--rpc-url` (and pass the wasm file, not the folder).
+- gblend CLI flags: use `--rpc`, not `--rpc-url` (and pass the wasm file, not the folder).
 - Passing a directory to deploy: always pass `./out/PowerCalculator.wasm/lib.wasm`.
 - Auction with past START/END blocks shows 0 price: recompute with `scripts/computeBlocks.js`.
 - Minor integer rounding differences (JS vs WASM): expect small rounding differences in off-chain comparisons.
 
 That’s it. HH remains your primary flow for Solidity, and gblend stays confined to the WASM helper and the generated interface.
-- gblend CLI flag mismatch: use `--rpc`, not `--rpc-url` (and pass the wasm file, not the folder).
