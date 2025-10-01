@@ -24,7 +24,7 @@ async function main() {
   console.log("Duration (blocks):", durationBlocks);
   console.log("Exponent:", exponent.toString());
 
-  const Factory = await ethers.getContractFactory("DutchAuctionWasmWrapper");
+  const Factory = await ethers.getContractFactory("BlendedDutchAuction");
   const auction = await Factory.deploy(
     wasmAddress,
     startPrice,
@@ -33,7 +33,7 @@ async function main() {
   );
   await auction.deployed();
 
-  console.log("DutchAuctionWasmWrapper deployed to:", auction.address);
+  console.log("BlendedDutchAuction deployed to:", auction.address);
   fs.writeFileSync("deployed-addresses-solidity.txt", auction.address + "\n");
 }
 

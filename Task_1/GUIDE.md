@@ -1,12 +1,12 @@
-## Beginner’s Guide: Migrate a Hardhat project to gblend (Rust/WASM) with a Dutch Auction example
+## Beginner’s Guide: Start with a native Hardhat project, then add gblend (Rust/WASM) for a Dutch Auction helper
 
-This guide shows how to migrate an existing Hardhat (Solidity) project to a blended setup by integrating a Rust/WASM contract compiled with gblend. You will:
+This guide assumes you already have a standard Hardhat project and want to add gblend support while minimizing disruption to your existing HH workflow. You will:
 
-- Build a Rust/WASM contract using gblend
-- Deploy the WASM contract to Fluent Testnet
-- Import the generated Solidity interface in a Solidity contract
-- Deploy the contract with Hardhat
-- Call the contract from a simple Node script
+- Build a Rust/WASM helper using gblend
+- Deploy the WASM helper to Fluent Testnet
+- Import the generated Solidity interface (`IPowerCalculator`) in a Solidity contract
+- Keep Hardhat as the primary tool to compile/deploy Solidity
+- Interact from a small Node script
 
 The focus is on Hardhat + gblend usage, not on writing Rust or Solidity from scratch.
 
@@ -14,7 +14,7 @@ The focus is on Hardhat + gblend usage, not on writing Rust or Solidity from scr
 
 ### What you’ll build
 
-We’ll upgrade a Dutch auction to use a non-linear price curve powered by a Rust/WASM helper. The Rust contract exposes `power(uint256 base, uint256 exponent)`. gblend generates a Solidity interface (`IPowerCalculator`) that we call from a Solidity auction contract to compute:
+We’ll upgrade a Dutch auction to use a non-linear price curve powered by a Rust/WASM helper. The Rust contract exposes `power(uint256 base, uint256 exponent)`. gblend generates a Solidity interface (`IPowerCalculator`) that we call from a Solidity auction contract (`BlendedDutchAuction`) to compute:
 
 price = START_PRICE * (remainingBlocks^EXPONENT) / (totalBlocks^EXPONENT)
 
@@ -22,9 +22,18 @@ For background on the auction mechanics, see Dutch Auction on Solidity by Exampl
 
 ---
 
+<<<<<<< HEAD
 ### Branch roles
 - `starting-point`: Baseline Hardhat-only starting state for the migration (pre-gblend, pre-WASM). Use this to begin the guide’s steps.
 - `blended-final`: Final state after integrating gblend + Rust/WASM and adding the Dutch auction wrapper, deploy script, and JS client. This reflects the completed guide.
+=======
+### Branches for migration
+
+This repository provides two branches to follow the migration path:
+
+- `starting-point`: Native Hardhat-only project (single Solidity contract and deploy script). No Foundry or gblend references yet.
+- `blended-final`: Final state after integrating gblend and the Rust/WASM helper. Hardhat remains the primary tool for Solidity.
+>>>>>>> 66ff7fa (chore: stage working blended-final state before branching)
 
 How to check out locally:
 
@@ -81,11 +90,11 @@ cd local
 npm install --save-dev hardhat @nomiclabs/hardhat-ethers ethers dotenv
 ```
 
-Create or update `local/hardhat.config.js` (CommonJS). We unify folders as follows:
+Create or update `local/hardhat.config.js` (CommonJS). We keep a HH-first layout:
 
-- Solidity sources: `local/src`
+- Solidity sources: `local/contracts/solidity`
 - Hardhat artifacts: `local/artifacts`
-- gblend outputs: `local/out`
+- gblend outputs: `local/out` (isolated)
 
 ```js
 require('dotenv').config();
@@ -104,7 +113,7 @@ module.exports = {
     }
   },
   paths: {
-    sources: './src',
+    sources: './contracts/solidity',
     artifacts: './artifacts',
     tests: './test'
   }
@@ -113,11 +122,10 @@ module.exports = {
 
 #### Folder layout rationale and tested setup
 
-- Using `src` for Solidity sources keeps Hardhat and Foundry/gblend aligned.
-- Hardhat writes build artifacts to `artifacts/`, while Foundry/gblend write to `out/`. Keeping these separate avoids tool conflicts and keeps imports predictable (`../out/PowerCalculator.wasm/interface.sol`).
-- This guide has been validated with:
-  - Hardhat: `paths.sources=src`, `paths.artifacts=artifacts`
-  - Foundry: `src=src`, `out=out`
+- Use `contracts/solidity` for Hardhat sources and keep gblend in `contracts/wasm`. Hardhat writes to `artifacts/`, gblend/Foundry write to `out/`. Keeping these separate avoids tool conflicts and keeps imports predictable (`../../out/PowerCalculator.wasm/interface.sol`).
+- This guide has been validated with HH-first:
+  - Hardhat: `paths.sources=contracts/solidity`, `paths.artifacts=artifacts`
+  - Foundry (optional): `src=contracts/wasm`, `out=out`
 
 ---
 
@@ -179,12 +187,12 @@ gblend create out/PowerCalculator.wasm/lib.wasm:IPowerCalculator \
 
 ## 4) Add a Dutch auction that calls the WASM power helper
 
-We use a minimal auction contract at `local/src/DutchAuctionWasmWrapper.sol` that imports the gblend-generated interface and calls the WASM helper for the non-linear curve.
+We use a minimal auction contract at `local/contracts/solidity/BlendedDutchAuction.sol` that imports the gblend-generated interface and calls the WASM helper for the non-linear curve.
 
 Key imports and naming (lint-friendly):
 
 ```solidity
-import { IPowerCalculator } from "../out/PowerCalculator.wasm/interface.sol"; // named import
+import { IPowerCalculator } from "../../out/PowerCalculator.wasm/interface.sol"; // named import
 
 // immutables use SCREAMING_SNAKE_CASE
 address payable public immutable SELLER;
@@ -229,7 +237,7 @@ Common gotcha: ensure `PRIVATE_KEY` is a full 66-character hex string (`0x` + 64
 
 ## 6) Call the auction from Node
 
-Use the provided ESM script `local/js-client/testDutchAuction.mjs` to read the artifact and interact. Make sure the artifact path matches Hardhat’s configured sources directory (`src`).
+Use the provided ESM script `local/js-client/testDutchAuction.mjs` to read the artifact and interact. Make sure the artifact path matches Hardhat’s configured sources directory (`contracts/solidity`).
 
 ```bash
 cd local
@@ -283,7 +291,7 @@ node js-client/testDutchAuction.mjs
 ## Where things end up
 
 - gblend build artifacts: `local/out/PowerCalculator.wasm/` (includes `lib.wasm`, `interface.sol`, `abi.json`)
-- Solidity contract: `local/src/DutchAuctionWasmWrapper.sol`
+- Solidity contract: `local/contracts/solidity/BlendedDutchAuction.sol`
 - Hardhat artifacts: `local/artifacts/`
 - Addresses:
   - WASM: record it yourself (e.g., `local/deployed-addresses-wasm.txt`)

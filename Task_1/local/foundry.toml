@@ -1,5 +1,5 @@
 [profile.default]
-src = "src"
+src = "contracts/wasm"
 out = "out"
 libs = ["lib"]
 

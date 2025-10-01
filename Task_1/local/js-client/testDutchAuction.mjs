@@ -3,7 +3,7 @@ import 'dotenv/config';
 import fs from 'fs';
 import { ethers } from 'ethers';
 
-const artifactPath = new URL('../artifacts/src/DutchAuctionWasmWrapper.sol/DutchAuctionWasmWrapper.json', import.meta.url);
+const artifactPath = new URL('../artifacts/contracts/solidity/BlendedDutchAuction.sol/BlendedDutchAuction.json', import.meta.url);
 // adjust the artifact path above if your Hardhat artifact path differs
 
 function normalizeToBigNumber(ethersLib, val) {
@@ -43,7 +43,7 @@ async function main() {
   }
   if (!solAddr) throw new Error('Could not find deployed Solidity wrapper address. Ensure deployed-addresses-solidity.txt or env var is set.');
 
-  console.log('Using DutchAuctionWasmWrapper:', solAddr);
+  console.log('Using BlendedDutchAuction:', solAddr);
 
   // load artifact ABI
   const artifactJson = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));

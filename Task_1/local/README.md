@@ -1,36 +1,33 @@
-# Blended Counter
+# Hardhat-first project with gblend WASM helper
 
-This is a blended Solidity + WASM example project.
+This project starts as a native Hardhat setup and integrates a Rust/WASM helper via gblend. Solidity sources live under `contracts/solidity` and gblend outputs are isolated to `out/`.
 
-## Project Structure
+## Layout
 
-- `src/BlendedCounter.sol` - Main Solidity contract
-- `src/power-calculator/` - Rust WASM module for power calculations
-- `test/` - Forge tests
-- `script/` - Deployment scripts
+- `contracts/solidity/BlendedDutchAuction.sol` — Dutch auction that calls the WASM power helper
+- `contracts/wasm/power-calculator` — Rust crate compiled by gblend to WASM
+- `out/PowerCalculator.wasm/` — gblend outputs (lib.wasm, interface.sol, abi.json, ...)
+- `artifacts/` — Hardhat build artifacts
 
-## Usage
+## Commands
 
-### Build
+Build WASM with gblend:
 
-```shell
+```bash
 gblend build
 ```
 
-### Test
+Compile and deploy Solidity with Hardhat:
 
-```shell
-gblend test
+```bash
+npx hardhat compile
+npx hardhat run scripts/deployDutchAuction.js --network fluentTestnet
 ```
 
-### Deploy
+Quick test client:
 
-```shell
-gblend script script/BlendedCounter.sol:Deploy --rpc-url <your_rpc_url> --private-key <your_private_key>
+```bash
+node js-client/testDutchAuction.mjs
 ```
 
-## Documentation
-
-For complete documentation on forge commands, see the [Foundry Book](https://getfoundry.sh/forge/overview).
-
-For Fluent-specific development guides, visit [Fluent Documentation](https://docs.fluent.xyz/gblend/usage).
+Hardhat is used for Solidity. Foundry config is restricted to `contracts/wasm` for gblend-only sources.
