@@ -5,200 +5,53 @@ This guide shows how to take an existing Hardhat (Solidity) project and make it 
 - Build a Rust/WASM contract using gblend
 - Deploy the WASM contract to Fluent Testnet
 - Import the generated Solidity interface in a wrapper contract
-- Deploy the Solidity wrapper with Hardhat
-- Call the wrapper from a simple Node script
+## Hardhat-only starting point
 
-The focus is on Hardhat + gblend usage, not on writing the Rust or Solidity logic itself.
+This branch contains a minimal Hardhat project to deploy and test a simple Dutch auction. There are no WASM, Foundry, or gblend references here. Use this as a clean baseline.
 
----
+### What’s included
 
-### What you’ll build
+- Contract: `local/contracts/solidity/DutchAuction.sol`
+- Script: `local/scripts/deployDutchAuction.js`
+- Config: `local/hardhat.config.js`
+- Env template: `local/.env.example`
 
-We’ll use a simple example: a Rust/WASM contract that exposes `power(uint256 base, uint256 exponent)`. gblend generates a Solidity interface for it (e.g. `IPowerCalculator`) that we can import into a Solidity wrapper. Then we deploy and call it end-to-end.
-
----
-
-## Prerequisites
+### Prerequisites
 
 - Node.js LTS + npm
-- Hardhat in your project (we’ll install the necessary deps below)
-- Rust toolchain (via rustup)
-- Foundry (forge, cast)
-- gblend CLI
 - RPC URL for Fluent Testnet
+- Private key with testnet funds (do not commit secrets)
 
-Make sure you have a private key with testnet funds. Keep secrets in a local `.env` file.
+### Setup
 
-Example `.env` (do not commit):
+1) Install deps (from `local/`):
+
+```bash
+npm install
+```
+
+2) Configure your `.env` (copy from `.env.example`):
 
 ```bash
 RPC_URL=https://rpc.testnet.fluent.xyz
 PRIVATE_KEY=0xYOUR_PRIVATE_KEY
-# Set after deploying WASM
-WASM_ADDRESS=0x...
+START_PRICE_WEI=100000000000000000
+DURATION_BLOCKS=2000
 ```
 
----
-
-## 1) Install Hardhat dependencies (in your existing project)
-
-From your project root:
-
-```bash
-npm install --save-dev hardhat @nomiclabs/hardhat-ethers ethers dotenv
-```
-
-Create or update `hardhat.config.js` (CommonJS is the simplest path):
-
-```js
-require('dotenv').config();
-require('@nomiclabs/hardhat-ethers');
-
-const RPC_URL = process.env.RPC_URL || 'https://rpc.testnet.fluent.xyz';
-const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
-
-module.exports = {
-  solidity: '0.8.19',
-  networks: {
-    fluentTestnet: {
-      url: RPC_URL,
-      chainId: 20994,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : []
-    }
-  },
-  paths: {
-    sources: './contracts',
-    artifacts: './artifacts',
-    tests: './test'
-  }
-};
-```
-
----
-
-## 2) Build the Rust/WASM with gblend
-
-Run the build from your project root (where your gblend project is initialized):
-
-```bash
-gblend build
-```
-
-You should see outputs like:
-
-```
-out/
-  PowerCalculator.wasm/
-    lib.wasm
-    interface.sol
-    abi.json
-    metadata.json
-  interface.sol/
-    IPowerCalculator.json
-```
-
-- `out/PowerCalculator.wasm/interface.sol` is a Solidity interface file containing `interface IPowerCalculator { ... }`.
-- The interface name (`IPowerCalculator`) is the contract name you’ll need when deploying the WASM.
-
----
-
-## 3) Deploy the WASM contract (Fluent Testnet)
-
-Deploy with gblend. The key is to use `<path>:<contractname>` where `contractname` is the interface name inside `interface.sol` (e.g. `IPowerCalculator`).
-
-```bash
-gblend create out/PowerCalculator.wasm/lib.wasm:IPowerCalculator \
-  --rpc-url "$RPC_URL" \
-  --private-key "$PRIVATE_KEY" \
-  --broadcast \
-  --wasm
-```
-
-Save the deployed address, e.g. into `deployed-addresses-wasm.txt`, and set `WASM_ADDRESS` in your `.env` to that value.
-
----
-
-## 4) Add a Solidity wrapper that calls WASM
-
-Create `contracts/BlendedCaller.sol`:
-
-```solidity
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
-
-import "../out/PowerCalculator.wasm/interface.sol";
-
-contract BlendedCaller {
-    IPowerCalculator public immutable powerCalculator;
-
-    constructor(address _powerCalculator) {
-        powerCalculator = IPowerCalculator(_powerCalculator);
-    }
-
-    function calcPower(uint256 base, uint256 exp) external returns (uint256) {
-        return powerCalculator.power(base, exp);
-    }
-}
-```
-
-Notes:
-
-- The import path points to the `interface.sol` that gblend generated.
-- We pass the deployed WASM contract address to the constructor.
-
----
-
-## 5) Deploy the Solidity wrapper with Hardhat
-
-Create `scripts/deployBlended.js`:
-
-```js
-require('dotenv').config();
-const fs = require('fs');
-const { ethers } = require('hardhat');
-
-async function main() {
-  const wasmAddress = process.env.WASM_ADDRESS;
-  if (!wasmAddress) throw new Error('WASM_ADDRESS missing in .env');
-
-  console.log('Using WASM contract address:', wasmAddress);
-  const BlendedCaller = await ethers.getContractFactory('BlendedCaller');
-  const blended = await BlendedCaller.deploy(wasmAddress);
-  await blended.deployed();
-  console.log('BlendedCaller deployed to:', blended.address);
-
-  fs.writeFileSync('deployed-addresses-solidity.txt', blended.address + '\n');
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
-```
-
-Compile and deploy:
+3) Compile and deploy:
 
 ```bash
 npx hardhat compile
-npx hardhat run scripts/deployBlended.js --network fluentTestnet
+npx hardhat run scripts/deployDutchAuction.js --network fluentTestnet
 ```
 
-The deployed wrapper address is written to `deployed-addresses-solidity.txt`.
+The address will be logged; you can save it for later interaction.
 
----
+### Notes
 
-## 6) Call the wrapper from Node
-
-Create `js-client/testCall.mjs` (ESM) that reads the compiled artifact via `fs`:
-
-```js
-import 'dotenv/config';
-import fs from 'fs';
-import { ethers } from 'ethers';
-
-const artifactPath = new URL('../artifacts/contracts/BlendedCaller.sol/BlendedCaller.json', import.meta.url);
-const artifactJson = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
-
+- This branch intentionally avoids any WASM-related files or steps.
+- For the integrated version that adds a non-linear price curve via a Rust/WASM helper and gblend, see the `blended-final` branch.
 async function main() {
   const rpc = process.env.RPC_URL;
   const pk = process.env.PRIVATE_KEY;
