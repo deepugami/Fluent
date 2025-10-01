@@ -9,16 +9,6 @@ pnpm-debug.log*
 artifacts/
 cache/
 
-# gblend / WASM build outputs
-out/
-PowerCalculator.wasm
-*.rwasm
-*.wasm
-*.wat
-
-# Rust (local target dirs)
-src/power-calculator/target/
-
 # Env / local-only files
 .env
 *.log
